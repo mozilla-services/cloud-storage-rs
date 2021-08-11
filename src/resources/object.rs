@@ -4,6 +4,7 @@ use crate::resources::common::ListResponse;
 use crate::resources::object_access_control::ObjectAccessControl;
 use futures::{stream, Stream, TryStream};
 use percent_encoding::{utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
+use serde::Serialize;
 
 /// A resource representing a file in Google Cloud Storage.
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -178,6 +179,35 @@ impl Object {
         filename: &str,
         mime_type: &str,
     ) -> crate::Result<Self> {
+        Object::create_with_params(bucket, file, filename, mime_type, None::<&()>).await
+    }
+
+    /// Create a new object with optional url parameters.
+    ///
+    /// For example, you may wish to use
+    /// [Preconditions](https://cloud.google.com/storage/docs/generations-preconditions)
+    /// when uploading a file. This provides an option for including "mix-in"
+    /// url parameters to apply to create requests.
+    ///
+    /// ## Example
+    /// ```rust,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// # fn read_cute_cat(_in: &str) -> Vec<u8> { vec![0, 1] }
+    /// use cloud_storage::Object;
+    ///
+    /// let file: Vec<u8> = read_cute_cat("cat.png");
+    /// Object::create("cat-photos", file, "recently read cat.png", "image/png", Some(&[("ifGenerationMatch", "0")])).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn create_with_params<T: Serialize + ?Sized>(
+        bucket: &str,
+        file: Vec<u8>,
+        filename: &str,
+        mime_type: &str,
+        additional_params: Option<&T>,
+    ) -> crate::Result<Self> {
         use reqwest::header::{CONTENT_LENGTH, CONTENT_TYPE};
 
         // has its own url for some reason
@@ -191,9 +221,13 @@ impl Object {
         let mut headers = crate::get_headers().await?;
         headers.insert(CONTENT_TYPE, mime_type.parse()?);
         headers.insert(CONTENT_LENGTH, file.len().to_string().parse()?);
-        let response = reqwest::Client::new()
+        let mut req = reqwest::Client::new()
             .post(url)
-            .headers(headers)
+            .headers(headers);
+        if let Some(add_ins) = additional_params {
+            req = req.query(add_ins)
+        }
+        let response = req
             .body(file)
             .send()
             .await?;
