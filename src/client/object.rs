@@ -15,6 +15,67 @@ const BASE_URL: &str = "https://storage.googleapis.com/upload/storage/v1/b";
 pub struct ObjectClient<'a>(pub(super) &'a super::Client);
 
 impl<'a> ObjectClient<'a> {
+    /// Create a new object with optional headers.
+    ///
+    /// You may wish to use [Preconditions](https://cloud.google.com/storage/docs/generations-preconditions)
+    /// when uploading data. This provides a option for a list of "mix-in" headers to apply
+    /// to create requests.
+    ///
+    /// ## Example
+    /// ```rust,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// # fn read_cute_cat(_in: &str) -> Vec<u8> { vec![0, 1] }
+    /// use cloud_storage::Client;
+    /// use cloud_storage::Object;
+    ///
+    /// let file: Vec<u8> = read_cute_cat("cat.png");
+    /// let client = Client::default();
+    /// let headers = reqwest::header::HEaderMap;
+    /// // Do not upload if cat.png is already present.
+    /// headers.insert("if-generation-match", "0");
+    /// client.object().create("cat-photos", file, "recently read cat.png", "image/png", Some(headers)).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn create_with_headers(
+        &self,
+        bucket: &str,
+        file: Vec<u8>,
+        filename: &str,
+        mime_type: &str,
+        additional_headers: Option<reqwest::header::HeaderMap>,
+    ) -> crate::Result<Object> {
+        use reqwest::header::{CONTENT_LENGTH, CONTENT_TYPE};
+
+        let url = &format!(
+            "{}/{}/o?uploadType=media&name={}",
+            BASE_URL,
+            percent_encode(&bucket),
+            percent_encode(&filename),
+        );
+        let mut headers = self.0.get_headers().await?;
+        if let Some(add_ins) = additional_headers {
+            for key in add_ins.keys() {
+                headers.insert(key, add_ins.get(key).unwrap().clone());
+            }
+        }
+        headers.insert(CONTENT_TYPE, mime_type.parse()?);
+        headers.insert(CONTENT_LENGTH, file.len().to_string().parse()?);
+        let response = self
+            .0
+            .client
+            .post(url)
+            .headers(headers)
+            .body(file)
+            .send()
+            .await?;
+        if response.status() == 200 {
+            Ok(serde_json::from_str(&response.text().await?)?)
+        } else {
+            Err(crate::Error::new(&response.text().await?))
+        }
+    }
     /// Create a new object.
     /// Upload a file as that is loaded in memory to google cloud storage, where it will be
     /// interpreted according to the mime type you specified.
@@ -39,30 +100,7 @@ impl<'a> ObjectClient<'a> {
         filename: &str,
         mime_type: &str,
     ) -> crate::Result<Object> {
-        use reqwest::header::{CONTENT_LENGTH, CONTENT_TYPE};
-
-        let url = &format!(
-            "{}/{}/o?uploadType=media&name={}",
-            BASE_URL,
-            percent_encode(&bucket),
-            percent_encode(&filename),
-        );
-        let mut headers = self.0.get_headers().await?;
-        headers.insert(CONTENT_TYPE, mime_type.parse()?);
-        headers.insert(CONTENT_LENGTH, file.len().to_string().parse()?);
-        let response = self
-            .0
-            .client
-            .post(url)
-            .headers(headers)
-            .body(file)
-            .send()
-            .await?;
-        if response.status() == 200 {
-            Ok(serde_json::from_str(&response.text().await?)?)
-        } else {
-            Err(crate::Error::new(&response.text().await?))
-        }
+        self.create_with_headers(bucket, file, filename, mime_type, None).await
     }
 
     /// Create a new object. This works in the same way as `ObjectClient::create`, except it does not need

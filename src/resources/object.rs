@@ -260,7 +260,7 @@ impl Object {
     ) -> crate::Result<Self> {
         crate::CLOUD_CLIENT
             .object()
-            .create(bucket, file, filename, mime_type)
+            .create(bucket, file, filename, mime_type, None)
             .await
     }
 
