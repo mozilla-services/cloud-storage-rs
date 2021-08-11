@@ -1,5 +1,6 @@
 use futures::{stream, Stream, TryStream};
 use reqwest::StatusCode;
+use serde::Serialize;
 
 use crate::{
     error::GoogleResponse,
@@ -15,10 +16,10 @@ const BASE_URL: &str = "https://storage.googleapis.com/upload/storage/v1/b";
 pub struct ObjectClient<'a>(pub(super) &'a super::Client);
 
 impl<'a> ObjectClient<'a> {
-    /// Create a new object with optional headers.
+    /// Create a new object with optional query parameters.
     ///
     /// You may wish to use [Preconditions](https://cloud.google.com/storage/docs/generations-preconditions)
-    /// when uploading data. This provides a option for a list of "mix-in" headers to apply
+    /// when uploading data. This provides a option for a list of "mix-in" parameters to apply
     /// to create requests.
     ///
     /// ## Example
@@ -31,20 +32,17 @@ impl<'a> ObjectClient<'a> {
     ///
     /// let file: Vec<u8> = read_cute_cat("cat.png");
     /// let client = Client::default();
-    /// let headers = reqwest::header::HEaderMap;
-    /// // Do not upload if cat.png is already present.
-    /// headers.insert("if-generation-match", "0");
-    /// client.object().create("cat-photos", file, "recently read cat.png", "image/png", Some(headers)).await?;
+    /// client.object().create_with_params("cat-photos", file, "recently read cat.png", "image/png", Some(&("ifGenerationMatch", "0"))).await?;
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn create_with_headers(
+    pub async fn create_with_params<T: Serialize + ?Sized>(
         &self,
         bucket: &str,
         file: Vec<u8>,
         filename: &str,
         mime_type: &str,
-        additional_headers: Option<reqwest::header::HeaderMap>,
+        additional_params: Option<&T>,
     ) -> crate::Result<Object> {
         use reqwest::header::{CONTENT_LENGTH, CONTENT_TYPE};
 
@@ -55,18 +53,17 @@ impl<'a> ObjectClient<'a> {
             percent_encode(&filename),
         );
         let mut headers = self.0.get_headers().await?;
-        if let Some(add_ins) = additional_headers {
-            for key in add_ins.keys() {
-                headers.insert(key, add_ins.get(key).unwrap().clone());
-            }
-        }
         headers.insert(CONTENT_TYPE, mime_type.parse()?);
         headers.insert(CONTENT_LENGTH, file.len().to_string().parse()?);
-        let response = self
+        let mut req = self
             .0
             .client
             .post(url)
-            .headers(headers)
+            .headers(headers);
+        if let Some(add_ins) = additional_params {
+            req = req.form(add_ins)
+        }
+        let response = req
             .body(file)
             .send()
             .await?;
@@ -100,7 +97,7 @@ impl<'a> ObjectClient<'a> {
         filename: &str,
         mime_type: &str,
     ) -> crate::Result<Object> {
-        self.create_with_headers(bucket, file, filename, mime_type, None).await
+        self.create_with_params(bucket, file, filename, mime_type, None::<&()>).await
     }
 
     /// Create a new object. This works in the same way as `ObjectClient::create`, except it does not need
