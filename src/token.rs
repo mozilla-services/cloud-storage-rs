@@ -19,6 +19,7 @@ struct Claims {
     iat: u64,
 }
 
+#[allow(dead_code)]
 #[derive(Deserialize, Debug)]
 struct TokenResponse {
     access_token: String,

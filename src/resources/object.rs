@@ -140,6 +140,7 @@ pub struct ObjectPrecondition {
     pub if_generation_match: i64,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ObjectList {
@@ -147,6 +148,7 @@ struct ObjectList {
     items: Vec<Object>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RewriteResponse {
@@ -179,7 +181,7 @@ impl Object {
         filename: &str,
         mime_type: &str,
     ) -> crate::Result<Self> {
-        Object::create_with_params(bucket, file, filename, mime_type, None::<&()>).await
+        Object::create_with_params(bucket, file, filename, mime_type, None::<&()>, None).await
     }
 
     /// Create a new object with optional url parameters.
@@ -207,6 +209,7 @@ impl Object {
         filename: &str,
         mime_type: &str,
         additional_params: Option<&T>,
+        req: Option<reqwest::Client>,
     ) -> crate::Result<Self> {
         use reqwest::header::{CONTENT_LENGTH, CONTENT_TYPE};
 
@@ -221,16 +224,11 @@ impl Object {
         let mut headers = crate::get_headers().await?;
         headers.insert(CONTENT_TYPE, mime_type.parse()?);
         headers.insert(CONTENT_LENGTH, file.len().to_string().parse()?);
-        let mut req = reqwest::Client::new()
-            .post(url)
-            .headers(headers);
+        let mut req = req.unwrap_or_default().post(url).headers(headers);
         if let Some(add_ins) = additional_params {
             req = req.query(add_ins)
         }
-        let response = req
-            .body(file)
-            .send()
-            .await?;
+        let response = req.body(file).send().await?;
         if response.status() == 200 {
             Ok(serde_json::from_str(&response.text().await?)?)
         } else {
@@ -878,12 +876,7 @@ impl Object {
         duration: u32,
         opts: crate::DownloadOptions,
     ) -> crate::Result<String> {
-        self.sign(
-            &self.name,
-            duration,
-            "GET",
-            opts.content_disposition,
-        )
+        self.sign(&self.name, duration, "GET", opts.content_disposition)
     }
 
     // /// Creates a [Signed Url](https://cloud.google.com/storage/docs/access-control/signed-urls)

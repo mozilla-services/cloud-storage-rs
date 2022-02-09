@@ -133,7 +133,7 @@ impl std::error::Error for GoogleErrorResponse {
         None
     }
 }
-
+#[allow(dead_code)]
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename = "camelCase")]
 struct ErrorList {
@@ -143,6 +143,7 @@ struct ErrorList {
 }
 
 /// Google Error structure
+#[allow(dead_code)]
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename = "camelCase")]
 pub struct GoogleError {
