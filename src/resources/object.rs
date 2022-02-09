@@ -218,8 +218,8 @@ impl Object {
         let url = &format!(
             "{}/{}/o?uploadType=media&name={}",
             BASE_URL,
-            percent_encode(&bucket),
-            percent_encode(&filename),
+            percent_encode(bucket),
+            percent_encode(filename),
         );
         let mut headers = crate::get_headers().await?;
         headers.insert(CONTENT_TYPE, mime_type.parse()?);
@@ -287,8 +287,8 @@ impl Object {
         let url = &format!(
             "{}/{}/o?uploadType=media&name={}",
             BASE_URL,
-            percent_encode(&bucket),
-            percent_encode(&filename),
+            percent_encode(bucket),
+            percent_encode(filename),
         );
         let mut headers = crate::get_headers().await?;
         headers.insert(CONTENT_TYPE, mime_type.parse()?);
@@ -699,8 +699,8 @@ impl Object {
         let url = format!(
             "{}/b/{}/o/{}/compose",
             crate::BASE_URL,
-            percent_encode(&bucket),
-            percent_encode(&destination_object)
+            percent_encode(bucket),
+            percent_encode(destination_object)
         );
         let result: GoogleResponse<Self> = reqwest::Client::new()
             .post(&url)
@@ -751,8 +751,8 @@ impl Object {
             base = crate::BASE_URL,
             sBucket = percent_encode(&self.bucket),
             sObject = percent_encode(&self.name),
-            dBucket = percent_encode(&destination_bucket),
-            dObject = percent_encode(&path),
+            dBucket = percent_encode(destination_bucket),
+            dObject = percent_encode(path),
         );
         let mut headers = crate::get_headers().await?;
         headers.insert(CONTENT_LENGTH, "0".parse()?);
@@ -905,9 +905,8 @@ impl Object {
         }
 
         // 0 Sort and construct the canonical headers
-        let mut headers = vec![];
-        headers.push(("host".to_string(), "storage.googleapis.com".to_string()));
-        headers.sort_unstable_by(|(k1, _), (k2, _)| k1.cmp(&k2));
+        let mut headers = vec![("host".to_string(), "storage.googleapis.com".to_string())];
+        headers.sort_unstable_by(|(k1, _), (k2, _)| k1.cmp(k2));
         let canonical_headers: String = headers
             .iter()
             .map(|(k, v)| format!("{}:{}", k.to_lowercase(), v.to_lowercase()))
