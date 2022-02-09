@@ -140,6 +140,7 @@ pub struct ObjectPrecondition {
     pub if_generation_match: i64,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ObjectList {
@@ -147,6 +148,7 @@ struct ObjectList {
     items: Vec<Object>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RewriteResponse {
@@ -179,7 +181,7 @@ impl Object {
         filename: &str,
         mime_type: &str,
     ) -> crate::Result<Self> {
-        Object::create_with_params(bucket, file, filename, mime_type, None::<&()>).await
+        Object::create_with_params(bucket, file, filename, mime_type, None::<&()>, None).await
     }
 
     /// Create a new object with optional url parameters.
@@ -207,6 +209,7 @@ impl Object {
         filename: &str,
         mime_type: &str,
         additional_params: Option<&T>,
+        req: Option<reqwest::Client>,
     ) -> crate::Result<Self> {
         use reqwest::header::{CONTENT_LENGTH, CONTENT_TYPE};
 
@@ -215,22 +218,17 @@ impl Object {
         let url = &format!(
             "{}/{}/o?uploadType=media&name={}",
             BASE_URL,
-            percent_encode(&bucket),
-            percent_encode(&filename),
+            percent_encode(bucket),
+            percent_encode(filename),
         );
         let mut headers = crate::get_headers().await?;
         headers.insert(CONTENT_TYPE, mime_type.parse()?);
         headers.insert(CONTENT_LENGTH, file.len().to_string().parse()?);
-        let mut req = reqwest::Client::new()
-            .post(url)
-            .headers(headers);
+        let mut req = req.unwrap_or_default().post(url).headers(headers);
         if let Some(add_ins) = additional_params {
             req = req.query(add_ins)
         }
-        let response = req
-            .body(file)
-            .send()
-            .await?;
+        let response = req.body(file).send().await?;
         if response.status() == 200 {
             Ok(serde_json::from_str(&response.text().await?)?)
         } else {
@@ -289,8 +287,8 @@ impl Object {
         let url = &format!(
             "{}/{}/o?uploadType=media&name={}",
             BASE_URL,
-            percent_encode(&bucket),
-            percent_encode(&filename),
+            percent_encode(bucket),
+            percent_encode(filename),
         );
         let mut headers = crate::get_headers().await?;
         headers.insert(CONTENT_TYPE, mime_type.parse()?);
@@ -472,13 +470,32 @@ impl Object {
     /// # }
     /// ```
     pub async fn read(bucket: &str, file_name: &str) -> crate::Result<Self> {
+        Ok(Self::read_with(bucket, file_name, &reqwest::Client::new()).await?)
+    }
+    /// Obtains a single object with the specified name in the specified bucket using the provided reqwest client.
+    /// ### Example
+    /// ```no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// use cloud_storage::Object;
+    ///
+    /// let req = reqwest::Client::builder().timeout(std::time::Duration::from_secs(3)).build().unwrap();
+    /// let object = Object::read("my_bucket", "path/to/my/file.png", &req).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn read_with(
+        bucket: &str,
+        file_name: &str,
+        req: &reqwest::Client,
+    ) -> crate::Result<Self> {
         let url = format!(
             "{}/b/{}/o/{}",
             crate::BASE_URL,
             percent_encode(bucket),
             percent_encode(file_name),
         );
-        let result: GoogleResponse<Self> = reqwest::Client::new()
+        let result: GoogleResponse<Self> = req
             .get(&url)
             .headers(crate::get_headers().await?)
             .send()
@@ -513,13 +530,32 @@ impl Object {
     /// # }
     /// ```
     pub async fn download(bucket: &str, file_name: &str) -> Result<Vec<u8>, Error> {
+        Ok(Self::download_with(bucket, file_name, &reqwest::Client::new()).await?)
+    }
+
+    /// Download the content of the object with the specified name in the specified bucket using the provided reqwest client.
+    /// ### Example
+    /// ```no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// use cloud_storage::Object;
+    /// let req = reqwest::Client::builder().timeout(std::time::Duration::from_secs(3)).build().unwrap();
+    /// let bytes = Object::download_with("my_bucket", "path/to/my/file.png", &req).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn download_with(
+        bucket: &str,
+        file_name: &str,
+        req: &reqwest::Client,
+    ) -> Result<Vec<u8>, Error> {
         let url = format!(
             "{}/b/{}/o/{}?alt=media",
             crate::BASE_URL,
             percent_encode(bucket),
             percent_encode(file_name),
         );
-        Ok(reqwest::Client::new()
+        Ok(req
             .get(&url)
             .headers(crate::get_headers().await?)
             .send()
@@ -701,8 +737,8 @@ impl Object {
         let url = format!(
             "{}/b/{}/o/{}/compose",
             crate::BASE_URL,
-            percent_encode(&bucket),
-            percent_encode(&destination_object)
+            percent_encode(bucket),
+            percent_encode(destination_object)
         );
         let result: GoogleResponse<Self> = reqwest::Client::new()
             .post(&url)
@@ -753,8 +789,8 @@ impl Object {
             base = crate::BASE_URL,
             sBucket = percent_encode(&self.bucket),
             sObject = percent_encode(&self.name),
-            dBucket = percent_encode(&destination_bucket),
-            dObject = percent_encode(&path),
+            dBucket = percent_encode(destination_bucket),
+            dObject = percent_encode(path),
         );
         let mut headers = crate::get_headers().await?;
         headers.insert(CONTENT_LENGTH, "0".parse()?);
@@ -878,12 +914,7 @@ impl Object {
         duration: u32,
         opts: crate::DownloadOptions,
     ) -> crate::Result<String> {
-        self.sign(
-            &self.name,
-            duration,
-            "GET",
-            opts.content_disposition,
-        )
+        self.sign(&self.name, duration, "GET", opts.content_disposition)
     }
 
     // /// Creates a [Signed Url](https://cloud.google.com/storage/docs/access-control/signed-urls)
@@ -912,9 +943,8 @@ impl Object {
         }
 
         // 0 Sort and construct the canonical headers
-        let mut headers = vec![];
-        headers.push(("host".to_string(), "storage.googleapis.com".to_string()));
-        headers.sort_unstable_by(|(k1, _), (k2, _)| k1.cmp(&k2));
+        let mut headers = vec![("host".to_string(), "storage.googleapis.com".to_string())];
+        headers.sort_unstable_by(|(k1, _), (k2, _)| k1.cmp(k2));
         let canonical_headers: String = headers
             .iter()
             .map(|(k, v)| format!("{}:{}", k.to_lowercase(), v.to_lowercase()))
