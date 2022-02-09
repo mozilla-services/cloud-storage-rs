@@ -470,13 +470,32 @@ impl Object {
     /// # }
     /// ```
     pub async fn read(bucket: &str, file_name: &str) -> crate::Result<Self> {
+        Ok(Self::read_with(bucket, file_name, &reqwest::Client::new()).await?)
+    }
+    /// Obtains a single object with the specified name in the specified bucket using the provided reqwest client.
+    /// ### Example
+    /// ```no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// use cloud_storage::Object;
+    ///
+    /// let req = reqwest::Client::builder().timeout(std::time::Duration::from_secs(3)).build().unwrap();
+    /// let object = Object::read("my_bucket", "path/to/my/file.png", &req).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn read_with(
+        bucket: &str,
+        file_name: &str,
+        req: &reqwest::Client,
+    ) -> crate::Result<Self> {
         let url = format!(
             "{}/b/{}/o/{}",
             crate::BASE_URL,
             percent_encode(bucket),
             percent_encode(file_name),
         );
-        let result: GoogleResponse<Self> = reqwest::Client::new()
+        let result: GoogleResponse<Self> = req
             .get(&url)
             .headers(crate::get_headers().await?)
             .send()
@@ -511,13 +530,32 @@ impl Object {
     /// # }
     /// ```
     pub async fn download(bucket: &str, file_name: &str) -> Result<Vec<u8>, Error> {
+        Ok(Self::download_with(bucket, file_name, &reqwest::Client::new()).await?)
+    }
+
+    /// Download the content of the object with the specified name in the specified bucket using the provided reqwest client.
+    /// ### Example
+    /// ```no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// use cloud_storage::Object;
+    /// let req = reqwest::Client::builder().timeout(std::time::Duration::from_secs(3)).build().unwrap();
+    /// let bytes = Object::download_with("my_bucket", "path/to/my/file.png", &req).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn download_with(
+        bucket: &str,
+        file_name: &str,
+        req: &reqwest::Client,
+    ) -> Result<Vec<u8>, Error> {
         let url = format!(
             "{}/b/{}/o/{}?alt=media",
             crate::BASE_URL,
             percent_encode(bucket),
             percent_encode(file_name),
         );
-        Ok(reqwest::Client::new()
+        Ok(req
             .get(&url)
             .headers(crate::get_headers().await?)
             .send()

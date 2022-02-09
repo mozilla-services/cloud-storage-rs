@@ -652,7 +652,7 @@ impl Bucket {
     /// # }
     /// ```
     pub async fn read(name: &str) -> crate::Result<Self> {
-        Ok(Bucket::read_with(name, reqwest::Client::new()).await?)
+        Ok(Bucket::read_with(name, &reqwest::Client::new()).await?)
     }
 
     /// Returns a single `Bucket` by its name using the provided Reqwest handle. If the Bucket does not exist, an error is returned.
@@ -677,7 +677,7 @@ impl Bucket {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn read_with(name: &str, req: reqwest::Client) -> crate::Result<Self> {
+    pub async fn read_with(name: &str, req: &reqwest::Client) -> crate::Result<Self> {
         let url = format!("{}/b/{}", crate::BASE_URL, name);
         let result: GoogleResponse<Self> = req
             .get(&url)

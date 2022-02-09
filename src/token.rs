@@ -61,7 +61,7 @@ impl Token {
             exp,
             iat: now,
         };
-        let header = jsonwebtoken::Header{
+        let header = jsonwebtoken::Header {
             alg: jsonwebtoken::Algorithm::RS256,
             ..Default::default()
         };
