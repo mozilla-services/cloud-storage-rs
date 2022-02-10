@@ -652,8 +652,34 @@ impl Bucket {
     /// # }
     /// ```
     pub async fn read(name: &str) -> crate::Result<Self> {
+        Ok(Bucket::read_with(name, &reqwest::Client::new()).await?)
+    }
+
+    /// Returns a single `Bucket` by its name using the provided Reqwest handle. If the Bucket does not exist, an error is returned.
+    /// The provided handle can set timeouts and other extended behaviors.
+    /// ### Example
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// use cloud_storage::Bucket;
+    /// # use cloud_storage::bucket::NewBucket;
+    /// # use reqwuest::Client;
+    /// # use std::time::Duration;
+    /// # let new_bucket = NewBucket {
+    /// #   name: "cloud-storage-rs-doc-2".to_string(),
+    /// #    ..Default::default()
+    /// # };
+    /// # let _ = Bucket::create(&new_bucket).await?;
+    ///
+    /// let req = Client::builder().timeout(Duration::from_secs(3)).build().unwrap();
+    /// let bucket = Bucket::read_with("cloud-storage-rs-doc-2", req).await?;
+    /// # bucket.delete().await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn read_with(name: &str, req: &reqwest::Client) -> crate::Result<Self> {
         let url = format!("{}/b/{}", crate::BASE_URL, name);
-        let result: GoogleResponse<Self> = reqwest::Client::new()
+        let result: GoogleResponse<Self> = req
             .get(&url)
             .headers(crate::get_headers().await?)
             .send()
