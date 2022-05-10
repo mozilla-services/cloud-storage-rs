@@ -18,6 +18,37 @@ pub use hmac_key::HmacKeyClient;
 pub use object::ObjectClient;
 pub use object_access_control::ObjectAccessControlClient;
 
+/// Constructs a new `Client`.
+#[derive(Default)]
+pub struct ClientBuilder {
+    client: Option<reqwest::Client>,
+    token_cache: Option<sync::Arc<dyn crate::TokenCache + Send>>,
+}
+
+impl ClientBuilder {
+    /// Sets the `reqwest::Client` to be used by this `Client`.
+    pub fn client(mut self, client: reqwest::Client) -> Self {
+        self.client = Some(client);
+        self
+    }
+
+    /// Sets the `TokenCache` to be used by this `Client`.
+    pub fn cache(mut self, token_cache: impl TokenCache + Send + 'static) -> Self {
+        self.token_cache = Some(sync::Arc::new(token_cache));
+        self
+    }
+
+    /// Construct a `Client` using this `ClientBuilder` configuration.
+    pub fn build(self) -> crate::Result<Client> {
+        Ok(Client {
+            client: self.client.unwrap_or_default(),
+            token_cache: self
+                .token_cache
+                .unwrap_or_else(|| sync::Arc::new(crate::Token::default())),
+        })
+    }
+}
+
 /// The primary entrypoint to perform operations with Google Cloud Storage.
 pub struct Client {
     client: reqwest::Client,
@@ -54,6 +85,11 @@ impl Client {
     /// 4. It attemps to do the same with the `GOOGLE_APPLICATION_CREDENTIALS_JSON` var.
     pub fn new() -> Self {
         Default::default()
+    }
+
+    /// Return a `ClientBuilder` to configure a `Client`.
+    pub fn builder() -> ClientBuilder {
+        ClientBuilder::default()
     }
 
     /// Initializer with a provided refreshable token
