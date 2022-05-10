@@ -1,5 +1,6 @@
 use futures_util::{stream, Stream, TryStream};
 use reqwest::StatusCode;
+use serde::Serialize;
 
 use crate::{
     error::GoogleResponse,
@@ -39,6 +40,44 @@ impl<'a> ObjectClient<'a> {
         filename: &str,
         mime_type: &str,
     ) -> crate::Result<Object> {
+        self.create_with_params(bucket, file, filename, mime_type, None::<&()>)
+            .await
+    }
+
+    /// Create a new object.
+    /// Upload a file as that is loaded in memory to google cloud storage, where it will be
+    /// interpreted according to the mime type you specified.
+    /// ## Example
+    /// ```rust,no_run
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// # fn read_cute_cat(_in: &str) -> Vec<u8> { vec![0, 1] }
+    /// use cloud_storage::Client;
+    /// use cloud_storage::Object;
+    ///
+    /// let file: Vec<u8> = read_cute_cat("cat.png");
+    /// let client = Client::default();
+    /// client
+    /// .object()
+    /// .create(
+    ///     "cat-photos",
+    ///     file,
+    ///     "recently read cat.png",
+    ///     "image/png",
+    ///     Some(&[("ifGenerationMatch", "0")]),
+    /// )
+    /// .await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn create_with_params<T: Serialize + ?Sized>(
+        &self,
+        bucket: &str,
+        file: Vec<u8>,
+        filename: &str,
+        mime_type: &str,
+        additional_params: Option<&T>,
+    ) -> crate::Result<Object> {
         use reqwest::header::{CONTENT_LENGTH, CONTENT_TYPE};
 
         let url = &format!(
@@ -50,14 +89,11 @@ impl<'a> ObjectClient<'a> {
         let mut headers = self.0.get_headers().await?;
         headers.insert(CONTENT_TYPE, mime_type.parse()?);
         headers.insert(CONTENT_LENGTH, file.len().to_string().parse()?);
-        let response = self
-            .0
-            .client
-            .post(url)
-            .headers(headers)
-            .body(file)
-            .send()
-            .await?;
+        let mut req = self.0.client.post(url).headers(headers);
+        if let Some(additional_params) = additional_params {
+            req = req.query(additional_params);
+        }
+        let response = req.body(file).send().await?;
         if response.status() == 200 {
             Ok(serde_json::from_str(&response.text().await?)?)
         } else {
